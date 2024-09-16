@@ -1,6 +1,7 @@
 import { copilotApi } from 'copilot-node-sdk';
-import { need } from '@/utils/need';
+import { need } from '../utils/need';
 
+type SearchParams = { [key: string]: string | string[] | undefined };
 /**
  * A helper function that instantiates the Copilot SDK and fetches data
  * from the Copilot API based on the contents of the token that gets
