@@ -6,16 +6,21 @@ const nextConfig = {
         source: '/(.*)',
         headers: [
           {
+            key: 'Content-Security-Policy',
+            value:
+              'frame-ancestors https://dashboard.copilot.com https://*.copilot.app https://new-allowed-domain.com',
+          },
+          {
             key: 'X-Frame-Options',
-            value: '',
+            value: 'SAMEORIGIN',
           },
           {
             key: 'X-Content-Type-Options',
             value: 'nosniff',
           },
           {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains; preload',
           },
         ],
       },
