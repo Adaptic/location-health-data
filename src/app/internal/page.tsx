@@ -27,107 +27,123 @@ ChartJS.register(
 );
 
 interface HealthResult {
-  healthConcern: string;
-  prevalence: number;
-  affected: number;
+  measure: string;
+  data_value: number;
+  year: string;
+  low_confidence_limit: number;
+  high_confidence_limit: number;
+  category: string;
 }
 
 export default function CaringHandDashboard() {
-  // Input states
-  const [address, setAddress] = useState<string>('');
+  const [city, setCity] = useState<string>('');
+  const [state, setState] = useState<string>('');
   const [attendance, setAttendance] = useState<number>(0);
   const [ageDistribution, setAgeDistribution] = useState<number>(70);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [results, setResults] = useState<HealthResult[]>([]);
+  const [cdcChartData, setCdcChartData] = useState<any>(null);
+
+  // Filters
+  const [selectedMeasure, setSelectedMeasure] = useState<string>('All');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const childDistribution = 100 - ageDistribution;
 
-  // Memoized chart data to avoid recalculating
-  const cdcChartData = useMemo(() => {
-    return {
-      labels: [2018, 2019, 2020, 2021, 2022],
-      datasets: [
-        {
-          label: 'Obesity (%)',
-          data: [30.5, 31.2, 32.0, 32.5, 33.0],
-          fill: false,
-          borderColor: '#ff6384',
-          tension: 0.1,
-        },
-        {
-          label: 'Smoking (%)',
-          data: [16.5, 16.0, 15.5, 15.2, 14.8],
-          fill: false,
-          borderColor: '#36a2eb',
-          tension: 0.1,
-        },
-        {
-          label: 'Diabetes (%)',
-          data: [7.5, 7.8, 8.0, 8.3, 8.5],
-          fill: false,
-          borderColor: '#cc65fe',
-          tension: 0.1,
-        },
-      ],
-    };
-  }, []);
+  const fetchCdcData = async () => {
+    try {
+      const response = await fetch(
+        `https://data.cdc.gov/resource/swc5-untb.json?locationname=${city}&stateabbr=${state}`,
+      );
+      const data = await response.json();
 
-  // Memoized CHNA data fetching
-  const chnaData = useMemo(
-    () => [
-      { healthConcern: 'Hypertension', prevalence: 28.1 },
-      { healthConcern: 'Asthma', prevalence: 12.4 },
-      { healthConcern: 'Heart Disease', prevalence: 10.5 },
-    ],
-    [],
-  );
+      if (data.length > 0) {
+        const combinedData: HealthResult[] = data.map((item: any) => ({
+          measure: item.measure,
+          data_value: parseFloat(item.data_value),
+          year: item.year,
+          low_confidence_limit: parseFloat(item.low_confidence_limit),
+          high_confidence_limit: parseFloat(item.high_confidence_limit),
+          category: item.category,
+        }));
 
-  // Handle form submission
+        setResults(combinedData);
+
+        // Group data by measure and prepare datasets for the chart
+        const measures = Array.from(
+          new Set(combinedData.map((item) => item.measure)),
+        );
+        const years = Array.from(
+          new Set(combinedData.map((item) => item.year)),
+        );
+
+        const datasets = measures.map((measure) => {
+          const measureData = combinedData
+            .filter((item) => item.measure === measure)
+            .sort((a, b) => parseInt(a.year) - parseInt(b.year));
+
+          return {
+            label: measure,
+            data: measureData.map((item) => item.data_value),
+            fill: false,
+            borderColor: `#${Math.floor(Math.random() * 16777215).toString(16)}`, // Generate random colors
+            tension: 0.1,
+          };
+        });
+
+        setCdcChartData({
+          labels: years,
+          datasets: datasets,
+        });
+      } else {
+        alert('No data found for the given city and state.');
+      }
+    } catch (error) {
+      console.error('Error fetching CDC data:', error);
+      alert('Error fetching CDC data. Please try again.');
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-
-    const combinedData: HealthResult[] = [
-      {
-        healthConcern: 'Obesity',
-        prevalence: 33.0,
-        affected: Math.floor((attendance * 33.0) / 100),
-      },
-      {
-        healthConcern: 'Smoking',
-        prevalence: 14.8,
-        affected: Math.floor((attendance * 14.8) / 100),
-      },
-      {
-        healthConcern: 'Diabetes',
-        prevalence: 8.5,
-        affected: Math.floor((attendance * 8.5) / 100),
-      },
-      {
-        healthConcern: 'Hypertension',
-        prevalence: 28.1,
-        affected: Math.floor(
-          ((attendance * 28.1) / 100) * (ageDistribution / 100),
-        ),
-      },
-      {
-        healthConcern: 'Asthma',
-        prevalence: 12.4,
-        affected: Math.floor(
-          ((attendance * 12.4) / 100) * (childDistribution / 100),
-        ),
-      },
-      {
-        healthConcern: 'Heart Disease',
-        prevalence: 10.5,
-        affected: Math.floor(
-          ((attendance * 10.5) / 100) * (ageDistribution / 100),
-        ),
-      },
-    ];
-
-    setResults(combinedData);
+    fetchCdcData();
     setSubmitted(true);
   };
+
+  // Filtered data for the table
+  const filteredResults = useMemo(() => {
+    return results.filter((item) => {
+      const matchMeasure =
+        selectedMeasure === 'All' || item.measure === selectedMeasure;
+      const matchCategory =
+        selectedCategory === 'All' || item.category === selectedCategory;
+      return matchMeasure && matchCategory;
+    });
+  }, [results, selectedMeasure, selectedCategory]);
+
+  // Filtered data for the chart
+  const filteredChartData = useMemo(() => {
+    if (!cdcChartData) return null;
+
+    const filteredDatasets = cdcChartData.datasets.filter((dataset: any) => {
+      const matchMeasure =
+        selectedMeasure === 'All' || dataset.label === selectedMeasure;
+      return matchMeasure;
+    });
+
+    return {
+      ...cdcChartData,
+      datasets: filteredDatasets,
+    };
+  }, [cdcChartData, selectedMeasure]);
+
+  // Get unique measures and categories for dropdown options
+  const uniqueMeasures = Array.from(
+    new Set(results.map((item) => item.measure)),
+  );
+  const uniqueCategories = Array.from(
+    new Set(results.map((item) => item.category)),
+  );
 
   return (
     <div
@@ -139,21 +155,36 @@ export default function CaringHandDashboard() {
             CaringHand Health Data Dashboard
           </h1>
           <p className="text-center">
-            Enter your church address to see community health data and trends.
+            Enter your city and state to see community health data and trends.
           </p>
 
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
-              <label htmlFor="address" className="form-label">
-                Church Address
+              <label htmlFor="city" className="form-label">
+                City
               </label>
               <input
                 type="text"
                 className="form-control"
-                id="address"
-                placeholder="123 Church St, City, State"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
+                id="city"
+                placeholder="Enter city name"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                required
+              />
+            </div>
+
+            <div className="mb-3">
+              <label htmlFor="state" className="form-label">
+                State Abbreviation
+              </label>
+              <input
+                type="text"
+                className="form-control"
+                id="state"
+                placeholder="Enter state abbreviation (e.g., AL)"
+                value={state}
+                onChange={(e) => setState(e.target.value)}
                 required
               />
             </div>
@@ -198,28 +229,70 @@ export default function CaringHandDashboard() {
             </button>
           </form>
 
-          {submitted && (
+          {submitted && results.length > 0 && (
             <>
+              <div className="mt-5 mb-3">
+                <label htmlFor="measureFilter" className="form-label">
+                  Filter by Health Concern (Measure)
+                </label>
+                <select
+                  id="measureFilter"
+                  className="form-select"
+                  value={selectedMeasure}
+                  onChange={(e) => setSelectedMeasure(e.target.value)}
+                >
+                  <option value="All">All</option>
+                  {uniqueMeasures.map((measure, index) => (
+                    <option key={index} value={measure}>
+                      {measure}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-3">
+                <label htmlFor="categoryFilter" className="form-label">
+                  Filter by Category
+                </label>
+                <select
+                  id="categoryFilter"
+                  className="form-select"
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                >
+                  <option value="All">All</option>
+                  {uniqueCategories.map((category, index) => (
+                    <option key={index} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <h3 className="mt-5">Health Concern Trends Over Time</h3>
-              <Line data={cdcChartData} />
+              {filteredChartData && <Line data={filteredChartData} />}
 
               <h3 className="mt-5">
-                Expected Number of People with Health Conditions
+                Health Data for {city}, {state}
               </h3>
               <table className="table table-striped table-bordered">
                 <thead>
                   <tr>
                     <th>Health Concern</th>
                     <th>Prevalence (%)</th>
-                    <th>Estimated Affected People</th>
+                    <th>Low Confidence Limit (%)</th>
+                    <th>High Confidence Limit (%)</th>
+                    <th>Category</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((item, index) => (
+                  {filteredResults.map((item, index) => (
                     <tr key={index}>
-                      <td>{item.healthConcern}</td>
-                      <td>{item.prevalence}</td>
-                      <td>{item.affected}</td>
+                      <td>{item.measure}</td>
+                      <td>{item.data_value}</td>
+                      <td>{item.low_confidence_limit}</td>
+                      <td>{item.high_confidence_limit}</td>
+                      <td>{item.category}</td>
                     </tr>
                   ))}
                 </tbody>
