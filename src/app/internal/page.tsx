@@ -14,6 +14,7 @@ import {
 } from 'chart.js';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import styles from '../styles/Home.module.css';
+import { adapticServer } from '@/utils/helpers';
 
 // Register Chart.js components
 ChartJS.register(
@@ -52,16 +53,10 @@ export default function CaringHandDashboard() {
 
   const fetchCdcData = async () => {
     try {
-      const appToken = 'ky4ggSk7qkq39cfk5RvFZK7fo'; // Replace with your actual app token
       const response = await fetch(
-        `https://data.cdc.gov/resource/swc5-untb.json?locationname=${city}&stateabbr=${state}`,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'X-App-Token': appToken, // Add the app token here
-          },
-        },
+        `${adapticServer}cdc-data?city=${city}&state=${state}`, // Call the Flask backend
       );
+
       const data = await response.json();
 
       if (data.length > 0) {
@@ -106,8 +101,8 @@ export default function CaringHandDashboard() {
         alert('No data found for the given city and state.');
       }
     } catch (error) {
-      console.error('Error fetching CDC data:', error);
-      alert('Error fetching CDC data. Please try again.');
+      console.error('Error fetching data from backend:', error);
+      alert('Error fetching data. Please try again.');
     }
   };
 
