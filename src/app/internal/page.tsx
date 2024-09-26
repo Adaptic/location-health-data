@@ -52,8 +52,15 @@ export default function CaringHandDashboard() {
 
   const fetchCdcData = async () => {
     try {
+      const appToken = 'ky4ggSk7qkq39cfk5RvFZK7fo'; // Replace with your actual app token
       const response = await fetch(
         `https://data.cdc.gov/resource/swc5-untb.json?locationname=${city}&stateabbr=${state}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'X-App-Token': appToken, // Add the app token here
+          },
+        },
       );
       const data = await response.json();
 
