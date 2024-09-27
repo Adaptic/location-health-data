@@ -10,9 +10,11 @@ export function middleware(request: NextRequest) {
   // space separated frame-ancestors list.
   const cspHeader = `
     default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic' https://vercel.live/ https://vercel.com 'unsafe-inline';
+    connect-src https://vercel.live/ https://vercel.com *.pusher.com *.pusherapp.com;
     style-src 'self' 'nonce-${nonce}';
-    img-src 'self' blob: data:;
+    img-src https://vercel.live/ https://vercel.com *.pusher.com/ data: blob 'self' blob: data:;
+    frame-src https://vercel.live/ https://vercel.com;
     font-src 'self';
     object-src 'none';
     base-uri 'self';
