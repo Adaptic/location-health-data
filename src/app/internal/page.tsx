@@ -34,6 +34,8 @@ interface HealthResult {
   low_confidence_limit: number;
   high_confidence_limit: number;
   category: string;
+  nationwide_value: number | null;
+  community_input?: number; // Field for user input
 }
 
 export default function CaringHandDashboard() {
@@ -59,19 +61,33 @@ export default function CaringHandDashboard() {
 
       const data = await response.json();
 
-      if (data.length > 0) {
-        const combinedData: HealthResult[] = data.map((item: any) => ({
-          measure: item.measure,
-          data_value: parseFloat(item.data_value),
-          year: item.year,
-          low_confidence_limit: parseFloat(item.low_confidence_limit),
-          high_confidence_limit: parseFloat(item.high_confidence_limit),
-          category: item.category,
-        }));
+      if (data.city_state_data.length > 0 || data.nationwide_data.length > 0) {
+        // Create a map of nationwide data for easy access by measure and year
+        const nationwideMap = new Map();
+        data.nationwide_data.forEach((item: any) => {
+          const key = `${item.measure}_${item.year}`;
+          nationwideMap.set(key, parseFloat(item.data_value));
+        });
+
+        // Combine the city/state-specific data with corresponding nationwide data
+        const combinedData: HealthResult[] = data.city_state_data.map(
+          (item: any) => {
+            const nationwideKey = `${item.measure}_${item.year}`;
+            return {
+              measure: item.measure,
+              data_value: parseFloat(item.data_value),
+              year: item.year,
+              low_confidence_limit: parseFloat(item.low_confidence_limit),
+              high_confidence_limit: parseFloat(item.high_confidence_limit),
+              category: item.category,
+              nationwide_value: nationwideMap.get(nationwideKey) || null, // Add nationwide data here
+            };
+          },
+        );
 
         setResults(combinedData);
 
-        // Group data by measure and prepare datasets for the chart
+        // Prepare datasets for the chart
         const measures = Array.from(
           new Set(combinedData.map((item) => item.measure)),
         );
@@ -112,15 +128,18 @@ export default function CaringHandDashboard() {
     setSubmitted(true);
   };
 
-  // Filtered data for the table
+  // Filtered and sorted data for the table
   const filteredResults = useMemo(() => {
-    return results.filter((item) => {
+    const filtered = results.filter((item) => {
       const matchMeasure =
         selectedMeasure === 'All' || item.measure === selectedMeasure;
       const matchCategory =
         selectedCategory === 'All' || item.category === selectedCategory;
       return matchMeasure && matchCategory;
     });
+
+    // Sort by data_value in descending order
+    return filtered.sort((a, b) => b.data_value - a.data_value);
   }, [results, selectedMeasure, selectedCategory]);
 
   // Filtered data for the chart
@@ -163,7 +182,7 @@ export default function CaringHandDashboard() {
           <form onSubmit={handleSubmit}>
             <div className="mb-3">
               <label htmlFor="city" className="form-label">
-                City
+                City / County
               </label>
               <input
                 type="text"
@@ -271,9 +290,6 @@ export default function CaringHandDashboard() {
                 </select>
               </div>
 
-              <h3 className="mt-5">Health Concern Trends Over Time</h3>
-              {filteredChartData && <Line data={filteredChartData} />}
-
               <h3 className="mt-5">
                 Health Data for {city}, {state}
               </h3>
@@ -281,9 +297,10 @@ export default function CaringHandDashboard() {
                 <thead>
                   <tr>
                     <th>Health Concern</th>
+                    <th>Community Input (%)</th>{' '}
+                    {/* Moved to the second column */}
                     <th>Prevalence (%)</th>
-                    <th>Low Confidence Limit (%)</th>
-                    <th>High Confidence Limit (%)</th>
+                    <th>US Prevalence (%)</th>
                     <th>Category</th>
                   </tr>
                 </thead>
@@ -291,14 +308,55 @@ export default function CaringHandDashboard() {
                   {filteredResults.map((item, index) => (
                     <tr key={index}>
                       <td>{item.measure}</td>
-                      <td>{item.data_value}</td>
-                      <td>{item.low_confidence_limit}</td>
-                      <td>{item.high_confidence_limit}</td>
+                      <td>
+                        <input
+                          type="number"
+                          className="form-control"
+                          placeholder="Enter value"
+                          value={item.community_input || ''}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            setResults((prevResults) =>
+                              prevResults.map((res, i) =>
+                                i === index
+                                  ? { ...res, community_input: value }
+                                  : res,
+                              ),
+                            );
+                          }}
+                        />
+                      </td>
+                      <td>
+                        {item.data_value}{' '}
+                        {item.nationwide_value !== null && (
+                          <span>
+                            {item.data_value > item.nationwide_value
+                              ? '↑'
+                              : '↓'}
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {item.nationwide_value !== null
+                          ? item.nationwide_value
+                          : 'N/A'}
+                      </td>
                       <td>{item.category}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <h3 className="mt-5">Interactive Health Outcomes Map</h3>
+              <div className="mb-5">
+                <iframe
+                  src="https://experience.arcgis.com/experience/dc15b033b88e423d85808ce04bd7a497/page/Health-Outcomes/?org=cdcarcgis&views=Arthritis&org=cdcarcgis"
+                  width="100%"
+                  height="600px"
+                  style={{ border: 'none' }}
+                  title="Interactive Health Outcomes Map"
+                  allowFullScreen
+                ></iframe>
+              </div>
             </>
           )}
         </div>
