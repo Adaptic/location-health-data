@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -12,11 +12,28 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import 'bootstrap/dist/css/bootstrap.min.css';
-import styles from '../styles/Home.module.css';
 import { adapticServer } from '@/utils/helpers';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Slider } from '@/components/ui/slider';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -35,7 +52,7 @@ interface HealthResult {
   high_confidence_limit: number;
   category: string;
   nationwide_value: number | null;
-  community_input?: number; // Field for user input
+  community_input?: number;
 }
 
 export default function CaringHandDashboard() {
@@ -46,30 +63,24 @@ export default function CaringHandDashboard() {
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [results, setResults] = useState<HealthResult[]>([]);
   const [cdcChartData, setCdcChartData] = useState<any>(null);
-
-  // Filters
   const [selectedMeasure, setSelectedMeasure] = useState<string>('All');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   const childDistribution = 100 - ageDistribution;
 
   const fetchCdcData = async () => {
     try {
       const response = await fetch(
-        `${adapticServer}cdc-data?city=${city}&state=${state}`, // Call the Flask backend
+        `${adapticServer}cdc-data?city=${city}&state=${state}`,
       );
-
       const data = await response.json();
 
       if (data.city_state_data.length > 0 || data.nationwide_data.length > 0) {
-        // Create a map of nationwide data for easy access by measure and year
         const nationwideMap = new Map();
         data.nationwide_data.forEach((item: any) => {
           const key = `${item.measure}_${item.year}`;
           nationwideMap.set(key, parseFloat(item.data_value));
         });
 
-        // Combine the city/state-specific data with corresponding nationwide data
         const combinedData: HealthResult[] = data.city_state_data.map(
           (item: any) => {
             const nationwideKey = `${item.measure}_${item.year}`;
@@ -80,14 +91,13 @@ export default function CaringHandDashboard() {
               low_confidence_limit: parseFloat(item.low_confidence_limit),
               high_confidence_limit: parseFloat(item.high_confidence_limit),
               category: item.category,
-              nationwide_value: nationwideMap.get(nationwideKey) || null, // Add nationwide data here
+              nationwide_value: nationwideMap.get(nationwideKey) || null,
             };
           },
         );
 
         setResults(combinedData);
 
-        // Prepare datasets for the chart
         const measures = Array.from(
           new Set(combinedData.map((item) => item.measure)),
         );
@@ -104,7 +114,7 @@ export default function CaringHandDashboard() {
             label: measure,
             data: measureData.map((item) => item.data_value),
             fill: false,
-            borderColor: `#${Math.floor(Math.random() * 16777215).toString(16)}`, // Generate random colors
+            borderColor: `#${Math.floor(Math.random() * 16777215).toString(16)}`,
             tension: 0.1,
           };
         });
@@ -128,190 +138,151 @@ export default function CaringHandDashboard() {
     setSubmitted(true);
   };
 
-  // Filtered and sorted data for the table
   const filteredResults = useMemo(() => {
     const filtered = results.filter((item) => {
       const matchMeasure =
         selectedMeasure === 'All' || item.measure === selectedMeasure;
-      const matchCategory =
-        selectedCategory === 'All' || item.category === selectedCategory;
-      return matchMeasure && matchCategory;
+      return matchMeasure;
     });
-
-    // Sort by data_value in descending order
     return filtered.sort((a, b) => b.data_value - a.data_value);
-  }, [results, selectedMeasure, selectedCategory]);
+  }, [results, selectedMeasure]);
 
-  // Filtered data for the chart
   const filteredChartData = useMemo(() => {
     if (!cdcChartData) return null;
-
     const filteredDatasets = cdcChartData.datasets.filter((dataset: any) => {
       const matchMeasure =
         selectedMeasure === 'All' || dataset.label === selectedMeasure;
       return matchMeasure;
     });
-
-    return {
-      ...cdcChartData,
-      datasets: filteredDatasets,
-    };
+    return { ...cdcChartData, datasets: filteredDatasets };
   }, [cdcChartData, selectedMeasure]);
 
-  // Get unique measures and categories for dropdown options
   const uniqueMeasures = Array.from(
     new Set(results.map((item) => item.measure)),
   );
-  const uniqueCategories = Array.from(
-    new Set(results.map((item) => item.category)),
-  );
 
   return (
-    <div
-      className={`d-flex flex-column justify-content-center align-items-center ${styles.page}`}
-    >
-      <div className={`container ${styles.content}`}>
-        <div className="col-12 col-md-8">
-          <h1 className={`text-center ${styles.header}`}>
-            CaringHand Health Data Dashboard
-          </h1>
-          <p className="text-center">
-            Enter your city and state to see community health data and trends.
-          </p>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold text-center mb-8">
+        Health Data Dashboard
+      </h1>
+      <p className="text-center mb-8">
+        Enter your city and state to see community health data and trends.
+      </p>
 
-          <form onSubmit={handleSubmit}>
-            <div className="mb-3">
-              <label htmlFor="city" className="form-label">
-                City / County
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                id="city"
-                placeholder="Enter city name"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                required
-              />
+      <Card className="mb-8">
+        <CardHeader>
+          <CardTitle>Input Data</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="city">City / County</Label>
+                <Input
+                  id="city"
+                  placeholder="Enter city name"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="state">State Abbreviation</Label>
+                <Input
+                  id="state"
+                  placeholder="Enter state abbreviation (e.g., AL)"
+                  value={state}
+                  onChange={(e) => setState(e.target.value)}
+                  required
+                />
+              </div>
             </div>
-
-            <div className="mb-3">
-              <label htmlFor="state" className="form-label">
-                State Abbreviation
-              </label>
-              <input
-                type="text"
-                className="form-control"
-                id="state"
-                placeholder="Enter state abbreviation (e.g., AL)"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                required
-              />
-            </div>
-
-            <div className="mb-3">
-              <label htmlFor="attendance" className="form-label">
-                Total Church Attendance
-              </label>
-              <input
-                type="number"
-                className="form-control"
+            <div className="space-y-2">
+              <Label htmlFor="attendance">Total Church Attendance</Label>
+              <Input
                 id="attendance"
+                type="number"
                 value={attendance}
                 onChange={(e) => setAttendance(parseInt(e.target.value, 10))}
                 required
                 min="0"
               />
             </div>
-
-            <div className="mb-3">
-              <label className="form-label">Percent of Adults</label>
-              <input
-                type="range"
-                className="form-range"
-                min="0"
-                max="100"
-                value={ageDistribution}
-                onChange={(e) =>
-                  setAgeDistribution(parseInt(e.target.value, 10))
-                }
+            <div className="space-y-2">
+              <Label>Percent of Adults</Label>
+              <Slider
+                min={0}
+                max={100}
+                step={1}
+                value={[ageDistribution]}
+                onValueChange={(value) => setAgeDistribution(value[0])}
               />
-              <p>
+              <p className="text-sm text-muted-foreground">
                 Adults: {ageDistribution}%, Children: {childDistribution}%
               </p>
             </div>
-
-            <button
-              type="submit"
-              className={`btn btn-success ${styles.button}`}
-            >
+            <Button type="submit" className="w-full">
               Submit
-            </button>
+            </Button>
           </form>
+        </CardContent>
+      </Card>
 
-          {submitted && results.length > 0 && (
-            <>
-              <div className="mt-5 mb-3">
-                <label htmlFor="measureFilter" className="form-label">
+      {submitted && results.length > 0 && (
+        <>
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Filters</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="measureFilter">
                   Filter by Health Concern (Measure)
-                </label>
-                <select
-                  id="measureFilter"
-                  className="form-select"
+                </Label>
+                <Select
                   value={selectedMeasure}
-                  onChange={(e) => setSelectedMeasure(e.target.value)}
+                  onValueChange={setSelectedMeasure}
                 >
-                  <option value="All">All</option>
-                  {uniqueMeasures.map((measure, index) => (
-                    <option key={index} value={measure}>
-                      {measure}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a measure" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="All">All</SelectItem>
+                    {uniqueMeasures.map((measure, index) => (
+                      <SelectItem key={index} value={measure}>
+                        {measure}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="mb-3">
-                <label htmlFor="categoryFilter" className="form-label">
-                  Filter by Category
-                </label>
-                <select
-                  id="categoryFilter"
-                  className="form-select"
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                >
-                  <option value="All">All</option>
-                  {uniqueCategories.map((category, index) => (
-                    <option key={index} value={category}>
-                      {category}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <h3 className="mt-5">
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>
                 Health Data for {city}, {state}
-              </h3>
-              <table className="table table-striped table-bordered">
-                <thead>
-                  <tr>
-                    <th>Health Concern</th>
-                    <th>Community Input (%)</th>{' '}
-                    {/* Moved to the second column */}
-                    <th>Prevalence (%)</th>
-                    <th>US Prevalence (%)</th>
-                    <th>Category</th>
-                  </tr>
-                </thead>
-                <tbody>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Health Concern</TableHead>
+                    <TableHead>Community Input (%)</TableHead>
+                    <TableHead>Prevalence (%)</TableHead>
+                    <TableHead>US Prevalence (%)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {filteredResults.map((item, index) => (
-                    <tr key={index}>
-                      <td>{item.measure}</td>
-                      <td>
-                        <input
+                    <TableRow key={index}>
+                      <TableCell>{item.measure}</TableCell>
+                      <TableCell>
+                        <Input
                           type="number"
-                          className="form-control"
                           placeholder="Enter value"
                           value={item.community_input || ''}
                           onChange={(e) => {
@@ -325,8 +296,8 @@ export default function CaringHandDashboard() {
                             );
                           }}
                         />
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         {item.data_value}{' '}
                         {item.nationwide_value !== null && (
                           <span>
@@ -335,32 +306,48 @@ export default function CaringHandDashboard() {
                               : '↓'}
                           </span>
                         )}
-                      </td>
-                      <td>
+                      </TableCell>
+                      <TableCell>
                         {item.nationwide_value !== null
                           ? item.nationwide_value
                           : 'N/A'}
-                      </td>
-                      <td>{item.category}</td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-              <h3 className="mt-5">Interactive Health Outcomes Map</h3>
-              <div className="mb-5">
-                <iframe
-                  src="https://experience.arcgis.com/experience/dc15b033b88e423d85808ce04bd7a497/page/Health-Outcomes/?org=cdcarcgis&views=Arthritis&org=cdcarcgis"
-                  width="100%"
-                  height="600px"
-                  style={{ border: 'none' }}
-                  title="Interactive Health Outcomes Map"
-                  allowFullScreen
-                ></iframe>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+
+          <Card className="mb-8">
+            <CardHeader>
+              <CardTitle>Health Data Trends</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredChartData && (
+                <Line
+                  data={filteredChartData}
+                  options={{ responsive: true, maintainAspectRatio: false }}
+                />
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Interactive Health Outcomes Map</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <iframe
+                src="https://experience.arcgis.com/experience/dc15b033b88e423d85808ce04bd7a497/page/Health-Outcomes/?org=cdcarcgis&views=Arthritis&org=cdcarcgis"
+                className="w-full h-[600px] border-none"
+                title="Interactive Health Outcomes Map"
+                allowFullScreen
+              ></iframe>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
