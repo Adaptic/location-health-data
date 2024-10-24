@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -33,6 +33,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { MapPin } from 'lucide-react';
 
 ChartJS.register(
   CategoryScale,
@@ -53,6 +55,7 @@ interface HealthResult {
   category: string;
   nationwide_value: number | null;
   community_input?: number;
+  church_population?: number;
 }
 
 export default function CaringHandDashboard() {
@@ -64,8 +67,40 @@ export default function CaringHandDashboard() {
   const [results, setResults] = useState<HealthResult[]>([]);
   const [cdcChartData, setCdcChartData] = useState<any>(null);
   const [selectedMeasure, setSelectedMeasure] = useState<string>('All');
+  const [useGeolocation, setUseGeolocation] = useState<boolean>(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const childDistribution = 100 - ageDistribution;
+
+  useEffect(() => {
+    if (useGeolocation) {
+      setIsLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          try {
+            const response = await fetch(
+              `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
+            );
+            const data = await response.json();
+            setCity(data.city);
+            setState(data.principalSubdivisionCode.split('-')[1]);
+          } catch (error) {
+            console.error('Error fetching location data:', error);
+            alert('Error fetching location data. Please enter manually.');
+          } finally {
+            setIsLoading(false);
+          }
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          alert('Unable to get location. Please enter manually.');
+          setIsLoading(false);
+          setUseGeolocation(false);
+        },
+      );
+    }
+  }, [useGeolocation]);
 
   const fetchCdcData = async () => {
     try {
@@ -81,21 +116,24 @@ export default function CaringHandDashboard() {
           nationwideMap.set(key, parseFloat(item.data_value));
         });
 
-        const combinedData: HealthResult[] = data.city_state_data.map(
-          (item: any) => {
-            const nationwideKey = `${item.measure}_${item.year}`;
-            return {
-              measure: item.measure,
-              data_value: parseFloat(item.data_value),
-              year: item.year,
-              low_confidence_limit: parseFloat(item.low_confidence_limit),
-              high_confidence_limit: parseFloat(item.high_confidence_limit),
-              category: item.category,
-              nationwide_value: nationwideMap.get(nationwideKey) || null,
-            };
-          },
-        );
+        const combinedDataMap = new Map();
+        data.city_state_data.forEach((item: any) => {
+          const nationwideKey = `${item.measure}_${item.year}`;
+          const healthResult: HealthResult = {
+            measure: item.measure,
+            data_value: parseFloat(item.data_value),
+            year: item.year,
+            low_confidence_limit: parseFloat(item.low_confidence_limit),
+            high_confidence_limit: parseFloat(item.high_confidence_limit),
+            category: item.category,
+            nationwide_value: nationwideMap.get(nationwideKey) || null,
+          };
+          combinedDataMap.set(item.measure, healthResult);
+        });
 
+        const combinedData: HealthResult[] = Array.from(
+          combinedDataMap.values(),
+        );
         setResults(combinedData);
 
         const measures = Array.from(
@@ -161,13 +199,19 @@ export default function CaringHandDashboard() {
     new Set(results.map((item) => item.measure)),
   );
 
+  // Calculate church population based on prevalence
+  const calculateChurchPopulation = (prevalence: number) => {
+    return Math.round((prevalence / 100) * attendance);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold text-center mb-8">
         Health Data Dashboard
       </h1>
       <p className="text-center mb-8">
-        Enter your city and state to see community health data and trends.
+        Enter your city and state or use geolocation to see community health
+        data and trends.
       </p>
 
       <Card className="mb-8">
@@ -176,6 +220,14 @@ export default function CaringHandDashboard() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="flex items-center space-x-2 mb-4">
+              <Switch
+                id="use-geolocation"
+                checked={useGeolocation}
+                onCheckedChange={setUseGeolocation}
+              />
+              <Label htmlFor="use-geolocation">Use Geolocation</Label>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="city">City / County</Label>
@@ -185,6 +237,7 @@ export default function CaringHandDashboard() {
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   required
+                  disabled={useGeolocation || isLoading}
                 />
               </div>
               <div className="space-y-2">
@@ -195,9 +248,16 @@ export default function CaringHandDashboard() {
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                   required
+                  disabled={useGeolocation || isLoading}
                 />
               </div>
             </div>
+            {isLoading && (
+              <div className="flex items-center justify-center space-x-2">
+                <MapPin className="animate-pulse" />
+                <span>Fetching location...</span>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="attendance">Total Church Attendance</Label>
               <Input
@@ -274,6 +334,7 @@ export default function CaringHandDashboard() {
                     <TableHead>Community Input (%)</TableHead>
                     <TableHead>Prevalence (%)</TableHead>
                     <TableHead>US Prevalence (%)</TableHead>
+                    <TableHead>Estimated Church Population</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -311,6 +372,9 @@ export default function CaringHandDashboard() {
                         {item.nationwide_value !== null
                           ? item.nationwide_value
                           : 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        {calculateChurchPopulation(item.data_value)}
                       </TableCell>
                     </TableRow>
                   ))}
